@@ -14,6 +14,10 @@
 import json
 import os
 
+import datetime
+
+import sheets
+
 import flask
 
 from oauth2client import client, crypt
@@ -33,6 +37,8 @@ CLIENT_CONFIG = {}
 # Mock database for now
 # TODO: have real database
 users = {}
+
+SHEETS_SERVICE = None
 
 
 class User(flask_login.UserMixin):
@@ -74,10 +80,24 @@ def login():
     return 'Bad login'
 
 
+def log_user_activity(email):
+    ss_id = sheets.get_or_create_ss(SHEETS_SERVICE, "User Log")
+
+    time_str = datetime.datetime.now().strftime('%m/%d/%Y %H:%M')
+    data = [[email, time_str]]
+    sheets.append_cells(SHEETS_SERVICE, ss_id, data)
+    sheets.share_file(SHEETS_SERVICE, ss_id, email)
+
+    return ss_id
+
 @app.route('/')
 @flask_login.login_required
 def protected():
-    return 'Logged in as: ' + flask_login.current_user.id
+    ss_id = log_user_activity(flask_login.current_user.id)
+
+    link = sheets.get_link(ss_id)
+
+    return flask.render_template("protected.html", sheet_link=link, user_id=flask_login.current_user.id)
 
 @login_manager.unauthorized_handler
 def unauthorized_handler():
@@ -104,20 +124,30 @@ def user_info_from_token(token, client_id):
     return idinfo
 
 
+def get_env_variable(var_name, description):
+    if var_name not in os.environ:
+        print ("Please specify %s as " +
+               "the environment variable:\n%s") % (description, var_name)
+        return None
+
+    return os.environ[var_name]
+
+
 def main():
     # Load the client secrets from the file downloaded from the
     # google cloud console
-    env_var_name = 'CLIENT_SECRETS_PATH'
-    if env_var_name not in os.environ:
-        print ("Please specify the path to your client secrets file as " +
-               "the environment variable:\n%s" % env_var_name)
-        return
+    client_secrets_path = get_env_variable('CLIENT_SECRETS_PATH', 'the path to the client secrets file')
+    robot_creds_path = get_env_variable('ROBOT_CREDS_PATH', 'the path to robot account credentials file')
 
-    client_secrets_path = os.environ[env_var_name]
+    if client_secrets_path is None or robot_creds_path is None:
+        return
 
     with open(client_secrets_path, "r") as fh:
         global CLIENT_CONFIG
         CLIENT_CONFIG = json.load(fh)
+
+    global SHEETS_SERVICE
+    SHEETS_SERVICE = sheets.get_sheets_service(robot_creds_path)
 
     # Secret key required for sessions
     import uuid
