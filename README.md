@@ -19,4 +19,4 @@ python server.py
 
 [1]:http://flask.pocoo.org/
 [2]:https://flask-login.readthedocs.io/en/latest/
-[3]:https://pcarleton.github.io/2017/3/27/google-sign-in.html
+[3]:https://pcarleton.github.io/2017/03/27/google-sign-in.html
